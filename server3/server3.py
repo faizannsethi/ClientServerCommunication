@@ -1,0 +1,118 @@
+"""
+Copyrights ©
+Code by: Faizan Ahmed (245112) and M. Deedahwar Mazhar (243516)
+Class: BESE-9A
+Subject: Computer Networks
+Project: Downloading large mp4 file from single server using TCP, downloading from multiple servers using TCP + File Segmentation + File Recombination
+"""
+#import statements
+
+
+from socket import *  #import socket module
+from time import *    #import time module 
+import os             #import OS
+import argparse
+
+parser = argparse.ArgumentParser(description = "Client wants to download a video file from multiple servers.")
+parser.add_argument("-f", "--port", help = "Port number.", type=int, default = 12347)
+parser.add_argument("-p", "--path_to_file", help = "Location of file (complete path without file name).", type = str, default = "C:\\Users\\Deedahwar\\Desktop\\server3")
+args = parser.parse_args()
+
+start_time = time()   #Starting time counter.
+
+SERVER_IP = ""        #Connect to localhost
+SERVER_PORT = args.port   #Port dedicated to respected servers
+location = args.path_to_file
+################ INITIALIZING SOCKET#############################
+server_socket = socket(AF_INET, SOCK_STREAM)
+server_socket.bind((SERVER_IP, SERVER_PORT))
+server_socket.listen(5)
+#INITIALIZING VARIABLES
+bytePosition = 0
+fragmentList = []
+
+while True:
+    print('\nThe server is ready for the connection...')
+    conn, clientAddr = server_socket.accept() #Connection test to see if the server is available
+    conn.close()
+    conn, clientAddress = server_socket.accept() #File Transfer connection established with client 
+    print("\nConnected to the client: ", clientAddress)
+
+    try:
+        status = "Alive <:)."
+        print("Port " + str(SERVER_PORT) + " Status: " + status + ". To Shutdown: press CTRL+C:\n") #Print the current state of the server
+        sleep(5)
+
+        conn.send("Retrieving the name of file.... ".encode())
+
+        fileName = (conn.recv(1024)).decode() #Recieving filename from the client
+        path = os.path.join(location, fileName)
+        fileExists = os.path.exists(path) #Checking for the file in directory
+        if fileExists == True: #If file exists inform client
+            conn.send(("File Found. ").encode())
+            conn.send(("found").encode())
+        if fileExists == False: #if file does not exist, inform client
+            conn.send(("File Not Found, please reconnect and try again.").encode())
+            conn.send(("notfound").encode())
+            conn.close()
+            continue #Restart the loop after closing connection
+            
+
+        pointer_position = (conn.recv(1024)).decode() #Recieve pointer from client in case a chunk of file is present
+
+        if pointer_position == "0": #IF FILE DOES NOT ALREADY EXIST AT THE CLIENT END
+            #data or information about the filesize
+            data = os.stat(path)
+            file_size = data.st_size
+        else:
+            file_size= int(os.stat(path).st_size)-int(pointer_position)#SET NEW POINTER POSITION AND SET NEW FILE SIZE
+
+        conn.send(str(file_size).encode()) #Send file size to the client
+
+        number_of_fragments = int((conn.recv(1024)).decode()) #Recieve Number of Fragments
+
+        fragmentSize = file_size // number_of_fragments #Calculating fragment size by dividing file into fragments of equal size 
+        send_file = open(path, 'rb')
+
+        if pointer_position != "0": #IF pointer is not zero....Read the file to catch up to the pointer
+            send_file.read(int(pointer_position))
+
+        # dividing the file into a number of fragments
+        for seg in range(0, number_of_fragments): #For dividing the file into segments(fragments)
+            send_file.seek(bytePosition, 0)
+            fragmentList.append(send_file.read(fragmentSize))
+            bytePosition = bytePosition + fragmentSize #Update byte position with fragment size
+        print("File segmented.\n")
+
+        #conn.send("Enter the required fragment number: ".encode())
+        fragment_number = int((conn.recv(1024)).decode()) #recieve fragment number
+
+        print("Currently connected client is connected to ", number_of_fragments, " servers.")
+
+        print("Port on which this server is connected: ", SERVER_PORT)
+
+        path = os.getcwd()
+        print("Location of the required file:", path)
+
+        print("\nSending...")
+        conn.sendall(fragmentList[fragment_number - 1])
+
+        print("\nThe requested segment has been successfully sent")
+        send_file.close()
+        conn.close()
+
+        seconds = time() - start_time
+        print("Running time of this server:", seconds)
+
+    except KeyboardInterrupt:
+        print("Connection closed manually")
+        
+        break
+
+    except:
+        print("Connection closed due to an error!!!")
+        
+        break
+
+status = "Dead :("
+print("Port "+str(SERVER_PORT)+" Status: " +status)
